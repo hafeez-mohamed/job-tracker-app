@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ground:#F2F4F4;
+  --surface:#FFFFFF;
+  --ink:#17191B;
+  --muted:#616C72;
+  --rule:#D9DEDF;
+  --rule-soft:#EAEDED;
+  --accent:#1B5E8C;
+
+  --s-not_applied:#7A848A;
+  --s-applied:#1B5E8C;
+  --s-interview:#9A6212;
+  --s-processing:#6B4FA0;
+  --s-accepted:#1D6B4A;
+  --s-rejected:#9C3B3B;
+  --s-dropped:#9AA1A5;
+
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --row:20px;
+  --org-row:36px;
+}
+
+@media (prefers-color-scheme:dark){
+  :root{
+    --ground:#15181A;--surface:#1C2023;--ink:#E7EAEA;--muted:#939DA2;
+    --rule:#31383C;--rule-soft:#262B2E;--accent:#5BA3D0;
+    --s-not_applied:#8A949A;--s-applied:#4D91C4;--s-interview:#C58E33;
+    --s-processing:#A88FD6;--s-accepted:#3E9A70;--s-rejected:#C46B6B;--s-dropped:#767E82;
+  }
+}
+
+*,*::before,*::after{box-sizing:border-box}
+
+html,body{height:100%}
+body{
+  margin:0;background:var(--ground);color:var(--ink);
+  font-family:var(--sans);font-size:13px;line-height:1.4;
+  -webkit-font-smoothing:antialiased;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+/* ---------- top bar ---------- */
+.bar{
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:8px 14px;background:var(--surface);
+  border-bottom:1px solid var(--rule);
+}
+.wordmark{font-weight:600;letter-spacing:-0.01em;margin-right:2px}
+
+.tracks{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.trackitem{display:flex;align-items:center;gap:1px}
+.tracksel{
+  padding:4px 9px;border-radius:4px;color:var(--muted);
+  display:flex;align-items:center;gap:6px;
+}
+.tracksel:hover{background:var(--rule-soft)}
+.tracksel[aria-selected="true"]{background:var(--ink);color:var(--surface)}
+.tracks .n{font-family:var(--mono);font-size:11px;opacity:.65}
+
+.trackinput{
+  width:120px;padding:4px 8px;border:1px solid var(--accent);border-radius:4px;
+  background:var(--surface);color:inherit;font:inherit;font-size:12px;
+}
+.trackinput:focus{outline:none}
+
+.trackedit{
+  width:18px;height:18px;border-radius:4px;color:var(--muted);font-size:10px;flex:none;
+}
+.trackedit:hover{background:var(--rule-soft);color:var(--ink)}
+
+.trackdel{
+  width:18px;height:18px;border-radius:4px;color:var(--rule);font-size:14px;flex:none;line-height:1;
+}
+.trackdel:hover{background:var(--s-rejected);color:#fff}
+
+.addtrack{
+  width:24px;height:24px;border-radius:4px;color:var(--muted);
+  font-size:15px;font-weight:600;
+}
+.addtrack:hover{background:var(--rule-soft);color:var(--ink)}
+.addtrack-first{margin-left:2px}
+
+.spacer{flex:1}
+
+#addOrg:disabled{opacity:.4;cursor:not-allowed}
+#addOrg:disabled:hover{opacity:.4}
+
+#q{
+  width:190px;padding:5px 9px;border:1px solid var(--rule);border-radius:4px;
+  background:var(--ground);color:inherit;font:inherit;
+}
+#q::placeholder{color:var(--muted)}
+#q:focus{outline:none;border-color:var(--accent);background:var(--surface)}
+
+.act{padding:5px 10px;border:1px solid var(--rule);border-radius:4px;color:var(--muted)}
+.act:hover{border-color:var(--muted);color:var(--ink)}
+.act.solid{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.act.solid:hover{opacity:.85}
+
+#saved{font-family:var(--mono);font-size:11px;color:var(--muted);min-width:96px;text-align:right}
+
+/* ---------- status filter strip ---------- */
+.strip{
+  display:flex;gap:4px;align-items:center;flex-wrap:wrap;
+  padding:6px 14px;border-bottom:1px solid var(--rule);
+}
+.chip{
+  display:flex;align-items:center;gap:6px;padding:3px 9px;border-radius:99px;
+  border:1px solid transparent;color:var(--muted);
+}
+.chip:hover{background:var(--rule-soft)}
+.chip[aria-pressed="true"]{border-color:currentColor}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.chip .n{font-family:var(--mono);font-size:11px}
+.chip.clear{margin-left:6px;text-decoration:underline;text-underline-offset:2px}
+
+/* ---------- table ---------- */
+.scroll{flex:1;overflow:auto;background:var(--surface)}
+
+table{border-collapse:separate;border-spacing:0;width:100%;table-layout:fixed}
+
+thead th{
+  position:sticky;top:0;z-index:3;
+  background:var(--surface);border-bottom:1px solid var(--rule);
+  text-align:center;font-weight:500;color:var(--muted);
+  padding:0 8px;height:22px;white-space:nowrap;
+  user-select:none;
+}
+thead th.sortable{cursor:pointer}
+thead th.sortable:hover{color:var(--ink)}
+thead th .arrow{font-family:var(--mono);opacity:.9}
+
+tbody td{
+  border-bottom:1px solid var(--rule-soft);
+  height:var(--row);padding:0;vertical-align:middle;text-align:center;
+}
+tbody tr.row:hover td{background:var(--rule-soft)}
+
+tbody tr.org-header td{height:var(--org-row)}
+tbody tr.org-header.clickable{cursor:pointer}
+
+/* organisation grouping: one left rule per org, name printed once */
+tr.row td.gut{border-left:2px solid var(--rule)}
+tr.row.gtop td{border-top:1px solid var(--rule)}
+tr.row.gtop td.gut{border-left-color:var(--muted)}
+
+td.gut{width:26px}
+.addrole{
+  width:18px;height:18px;border-radius:3px;color:var(--muted);
+  font-family:var(--mono);font-size:14px;font-weight:600;line-height:17px;
+}
+.addrole:hover{background:var(--rule);color:var(--ink)}
+
+/* org name cell: static arrow, name (text or, while renaming, an input), role count */
+.namewrap{display:flex;align-items:center;gap:8px;height:100%;padding:0 6px}
+.namewrap .cell{flex:1;min-width:0}
+.arrow-indicator{color:var(--muted);font-family:var(--mono);font-size:13px;flex:none;width:14px;text-align:center}
+.orgname{flex:1;min-width:0;font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.orgname.empty{color:var(--muted);font-weight:400;font-style:italic}
+.count{color:var(--muted);font-family:var(--mono);font-size:11px;flex:none;padding-right:3px}
+
+/* the role-column labels shown above an expanded org's own job listing */
+tr.subhead td{
+  height:20px;line-height:20px;padding:0 7px;background:var(--ground);
+  color:var(--muted);font-size:11.5px;font-weight:600;text-align:center;
+  text-transform:uppercase;letter-spacing:.02em;
+  border-bottom:1px solid var(--rule-soft);white-space:nowrap;overflow:hidden;
+}
+
+.rolerow-empty td{
+  height:18px;line-height:18px;padding:0 7px;color:var(--muted);font-style:italic;font-size:11px;
+}
+
+/* edit-mode inputs, only present on a row while it's being edited */
+.cell{
+  width:100%;height:18px;line-height:18px;border:0;box-shadow:inset 0 0 0 1px transparent;
+  background:transparent;color:inherit;font-family:inherit;font-size:14px;
+  padding:0 7px;border-radius:3px;text-align:left;
+}
+.cell::placeholder{color:var(--rule)}
+.cell:hover{box-shadow:inset 0 0 0 1px var(--rule)}
+.cell:focus{outline:none;background:var(--surface);box-shadow:inset 0 0 0 1px var(--accent), 0 0 0 2px rgba(27,94,140,.14)}
+.cell.org{font-weight:600;font-size:15px;height:26px;line-height:26px}
+
+/* read-only display of a field: plain text, not interactive */
+.fieldtext{
+  display:block;height:18px;line-height:18px;padding:0 7px;
+  overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;color:inherit;font-size:14px;
+}
+.fieldtext.empty{color:var(--rule)}
+.fieldlink{color:var(--accent);text-decoration:none;cursor:pointer}
+.fieldlink:hover{text-decoration:underline}
+
+.statusbadge{
+  display:inline-block;height:16px;margin:0 4px;padding:0 8px;border-radius:3px;
+  font-size:12px;font-weight:500;color:#fff;white-space:nowrap;line-height:16px;overflow:hidden;
+}
+.statusbadge[data-s="not_applied"]{background:var(--s-not_applied)}
+.statusbadge[data-s="applied"]{background:var(--s-applied)}
+.statusbadge[data-s="interview"]{background:var(--s-interview)}
+.statusbadge[data-s="processing"]{background:var(--s-processing)}
+.statusbadge[data-s="accepted"]{background:var(--s-accepted)}
+.statusbadge[data-s="rejected"]{background:var(--s-rejected)}
+.statusbadge[data-s="dropped"]{background:var(--s-dropped)}
+
+/* the one saturated element on the page, while a role is being edited */
+.status{
+  appearance:none;-webkit-appearance:none;
+  width:calc(100% - 8px);margin:0 4px;height:16px;line-height:16px;
+  border:0;border-radius:3px;padding:0 6px;
+  font-family:inherit;font-size:12px;font-weight:500;text-align:center;text-align-last:center;
+  color:#fff;background:var(--s-not_applied);cursor:pointer;
+}
+.status option{color:var(--ink);background:var(--surface);font-weight:400}
+.status[data-s="not_applied"]{background:var(--s-not_applied)}
+.status[data-s="applied"]{background:var(--s-applied)}
+.status[data-s="interview"]{background:var(--s-interview)}
+.status[data-s="processing"]{background:var(--s-processing)}
+.status[data-s="accepted"]{background:var(--s-accepted)}
+.status[data-s="rejected"]{background:var(--s-rejected)}
+.status[data-s="dropped"]{background:var(--s-dropped)}
+
+/* right-hand controls: rename/add/delete on the org row, edit/delete on each job row.
+   The end column's width is shared by every row (table-layout:fixed + colgroup),
+   so it's sized to comfortably fit the org row's 3 buttons; role rows just have
+   a little unused margin there, which keeps them from feeling cramped either. */
+td.end{width:64px}
+.endwrap{display:flex;gap:2px;align-items:center;justify-content:flex-end;height:100%;padding-right:4px}
+.iconbtn{width:16px;height:16px;border-radius:3px;color:var(--muted);font-size:10px;font-weight:600;line-height:15px}
+.iconbtn:hover{background:var(--rule);color:var(--ink)}
+.kill{width:16px;height:16px;border-radius:3px;color:var(--rule);font-size:13px;font-weight:600;line-height:15px}
+tr.row:hover .kill{color:var(--muted)}
+.kill:hover{background:var(--s-rejected);color:#fff}
+
+/* the org row is much taller, so its own rename/add/delete controls scale up to match */
+tr.org-header .endwrap{gap:3px}
+tr.org-header .iconbtn,
+tr.org-header .kill{width:18px;height:18px;font-size:13px;line-height:17px}
+tr.org-header .kill{font-size:17px}
+
+/* ---------- empty ---------- */
+.empty{padding:56px 20px;text-align:center;color:var(--muted)}
+.empty p{margin:0 0 14px;max-width:44ch;margin-inline:auto}
+
+.foot{
+  padding:5px 14px;border-top:1px solid var(--rule);background:var(--surface);
+  color:var(--muted);font-size:11px;display:flex;gap:16px;flex-wrap:wrap;
+}
+.foot kbd{font-family:var(--mono);border:1px solid var(--rule);border-radius:3px;padding:0 4px}
+
+/* ---------- overlays ---------- */
+.veil{
+  position:fixed;inset:0;z-index:50;
+  background:rgba(0,0,0,.34);backdrop-filter:blur(2px);
+  display:flex;align-items:center;justify-content:center;padding:20px;
+}
+.veil[hidden]{display:none}
+.card{
+  background:var(--surface);border:1px solid var(--rule);border-radius:8px;
+  padding:20px 22px;max-width:430px;box-shadow:0 12px 40px rgba(0,0,0,.22);
+}
+.card h3{margin:0 0 8px;font-size:15px;font-weight:600}
+.card p{margin:0 0 6px;color:var(--muted);line-height:1.5}
+.card code{font-family:var(--mono);font-size:12px;color:var(--ink)}
+.cardacts{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+</style>
+</head>
+
+<body>
+
+<div class="bar">
+  <span class="wordmark">Jobs</span>
+  <div class="tracks" id="tracks" role="tablist"></div>
+  <span class="spacer"></span>
+  <input id="q" type="search" placeholder="Filter  /" aria-label="Filter rows">
+  <button class="act solid" id="addOrg">Add organisation</button>
+  <button class="act" id="openFile">Open file</button>
+  <button class="act" id="saveFile">Save to file</button>
+  <span id="saved">unsaved</span>
+</div>
+
+<div class="strip" id="strip"></div>
+
+<div class="scroll">
+  <table id="grid">
+    <colgroup id="cols"></colgroup>
+    <thead><tr id="head"></tr></thead>
+    <tbody id="body"></tbody>
+  </table>
+  <div class="empty" id="empty" hidden></div>
+</div>
+
+<div class="foot">
+  <span><kbd>/</kbd> filter</span>
+  <span><kbd>Tab</kbd> next cell</span>
+  <span><kbd>⌘S</kbd> save to file</span>
+  <span id="fileline">All data lives in jobs.json.</span>
+</div>
+
+<div class="veil" id="gate" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="gateH">
+    <h3 id="gateH">Open your jobs.json</h3>
+    <p>All data lives in <code>jobs.json</code> &mdash; nothing is stored in this page or in the browser.</p>
+    <p>Opened from a <code>file://</code> path, the browser won't let the page read the file on its own. Pick it once and everything works from there.</p>
+    <p>To skip this step every time, serve the folder instead: <code>python3 -m http.server</code></p>
+    <div class="cardacts">
+      <button class="act solid" id="gatePick">Choose jobs.json</button>
+      <button class="act" id="gateNew">Start an empty tracker</button>
+    </div>
+  </div>
+</div>
+
+<div class="veil" id="exit" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="exitH">
+    <h3 id="exitH">You have unsaved changes</h3>
+    <p>Edits since your last save are only in this tab. Nothing has been written to <code>jobs.json</code> yet, and closing will lose them.</p>
+    <div class="cardacts">
+      <button class="act solid" id="exitSave">Save to jobs.json</button>
+      <button class="act" id="exitStay">Keep editing</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ============================ model ============================ */
+
+const STATUSES = [
+  {k:'not_applied', label:'Not applied'},
+  {k:'applied',      label:'Applied'},
+  {k:'interview',    label:'Interview'},
+  {k:'processing',   label:'Processing'},
+  {k:'accepted',     label:'Accepted'},
+  {k:'rejected',     label:'Rejected'},
+  {k:'dropped',      label:'Dropped'}
+];
+
+// one shared row layout for every category - what differs between people's
+// job hunts is the category itself (Industry, PhD, freelance, whatever),
+// not the fields on each role, so those fields stay uniform
+const COLS = [
+  {k:'title',    label:'Role',      w:'18%'},
+  {k:'contact',  label:'Contact',   w:'15%'},
+  {k:'status',   label:'Status',    w:'10%', type:'status'},
+  {k:'link',     label:'URL',       w:'16%'},
+  {k:'location', label:'Location',  w:'12%'},
+  {k:'notes',    label:'Notes',     w:'auto'}
+];
+const ORG_LABEL = 'Organisation';
+const MAX_CATEGORIES = 4;
+
+const uid = () => Math.random().toString(36).slice(2,9);
+const category = (o={}) => Object.assign({id:uid(),name:''},o);
+const role = (o={}) => Object.assign({id:uid(),title:'',status:'not_applied',contact:'',link:'',location:'',notes:''},o);
+const org = (o={}) => Object.assign({id:uid(),categoryId:null,name:'',roles:[role()]},o);
+
+/* Brings an older jobs.json up to the current shape: org-level location and
+   contacts move down onto each role, old status keys are renamed, the
+   org-level website/notes fields (no longer used) are dropped, and the old
+   fixed Industry/PhD/Part-time tracks become ordinary (renameable) entries
+   in data.categories, matched up to each org by a new categoryId. Runs
+   every time a file is opened, so nothing existing is lost in the process. */
+function migrate(d){
+  if(!Array.isArray(d.categories)) d.categories = [];
+  const legacyNames = {industry:'Industry', phd:'PhD', parttime:'Part-time'};
+  const legacyMap = {};
+  for(const o of (d.orgs||[])){
+    if(o.categoryId === undefined && typeof o.track === 'string'){
+      if(!legacyMap[o.track]){
+        const name = legacyNames[o.track] || o.track;
+        let c = d.categories.find(x=>x.name===name);
+        if(!c && d.categories.length < MAX_CATEGORIES){ c = category({name}); d.categories.push(c); }
+        legacyMap[o.track] = c || d.categories[0] || null;
+      }
+      o.categoryId = legacyMap[o.track] ? legacyMap[o.track].id : null;
+    }
+    delete o.track;
+
+    const legacyLocation = o.location;
+    const firstContact = Array.isArray(o.contacts) ? o.contacts[0] : null;
+    const legacyContact = firstContact
+      ? [firstContact.name, firstContact.email, firstContact.phone].filter(Boolean).join(' · ')
+      : '';
+    for(const r of (o.roles||[])){
+      if(r.location === undefined) r.location = legacyLocation || '';
+      if(r.contact === undefined) r.contact = legacyContact;
+      if(r.status === 'todo') r.status = 'not_applied';
+      if(r.status === 'offer') r.status = 'accepted';
+    }
+    delete o.location;
+    delete o.contacts;
+    delete o.website;
+    delete o.notes;
+  }
+  return d;
+}
+
+/* ============================ state ============================ */
+
+/* The JSON file is the only store. Nothing is kept in this page, and
+   nothing is kept in the browser. Close without saving and the edits go. */
+
+const SORT_DEFAULT = {key:'name', dir:1};   // employer name, A to Z
+
+let data      = {version:2, categories:[], orgs:[]};
+let activeCategory = null;    // id of the selected category, or null if none exist yet
+let query     = '';
+let filters   = new Set();
+let rolesOpen   = new Set();   // orgs whose job rows are expanded and visible
+let editingOrgs = new Set();   // orgs whose name field is currently editable
+let editingRoles= new Set();   // roles whose fields are currently editable
+let categoryEditing = new Set(); // categories whose name is currently editable
+let sort      = {...SORT_DEFAULT};
+let handle  = null;          // File System Access handle, once granted
+let dirty   = false;         // unsaved edits since the last write
+let loaded  = false;         // a file has been opened or fetched
+
+function touch(){
+  dirty = true;
+  mark(handle ? '\u25cf ' + handle.name : '\u25cf unsaved');
+  document.title = '\u2022 Job tracker';
+}
+function clean(label){
+  dirty = false;
+  mark(label);
+  document.title = 'Job tracker';
+}
+function mark(t){ document.getElementById('saved').textContent = t; }
+
+/* ============================ files ============================ */
+
+const canPick = 'showSaveFilePicker' in window;
+const PICKER  = {suggestedName:'jobs.json', types:[{description:'JSON', accept:{'application/json':['.json']}}]};
+const FILENAME = 'jobs.json';
+
+/* ---- automatic load on open ----
+   Served over http:// this fetches jobs.json with no interaction.
+   Opened as a file:// path the browser blocks the read, so we ask. */
+async function boot(){
+  try{
+    const res = await fetch(FILENAME, {cache:'no-store'});
+    if(!res.ok) throw new Error(res.status);
+    adopt(await res.json());
+    clean(FILENAME + ' \u2713');
+    note('Loaded ' + FILENAME + '. Press \u2318S / Ctrl+S to write changes back.');
+    gate(false);
+    return;
+  }catch(e){ /* file:// or missing file - fall through to the gate */ }
+  gate(true);
+}
+
+function gate(show){
+  document.getElementById('gate').hidden = !show;
+  if(show) document.getElementById('gatePick').focus();
+}
+
+document.getElementById('gatePick').onclick = ()=> document.getElementById('openFile').click();
+document.getElementById('gateNew').onclick  = ()=>{
+  data = {version:2, categories:[], orgs:[]};
+  activeCategory = null;
+  loaded = true; gate(false); render(); clean('new \u2014 not saved');
+};
+
+async function writeFile(){
+  try{
+    const w = await handle.createWritable();
+    await w.write(JSON.stringify(data,null,2));
+    await w.close();
+    clean(handle.name + ' \u2713');
+    return true;
+  }catch(e){ mark('save failed'); return false; }
+}
+
+/* Ctrl+S / the Save button. With a handle this overwrites the same file
+   silently; without one it opens the picker once, or downloads. */
+async function save(){
+  if(!canPick){ download(); return true; }
+  try{
+    if(!handle) handle = await window.showSaveFilePicker(PICKER);
+    const ok = await writeFile();
+    if(ok) note('Writing to ' + handle.name + ' on every save.');
+    return ok;
+  }catch(e){ return false; }   // user cancelled the picker
+}
+
+document.getElementById('saveFile').onclick = save;
+
+document.getElementById('openFile').onclick = async ()=>{
+  if(!canPick){ upload(); return; }
+  try{
+    const [h] = await window.showOpenFilePicker({types:PICKER.types});
+    adopt(JSON.parse(await (await h.getFile()).text()));
+    handle = h;
+    clean(h.name + ' \u2713');
+    note('Writing to ' + h.name + ' on every save.');
+    gate(false);
+  }catch(e){ if(e && e.name !== 'AbortError') alert('That file could not be read as tracker JSON.'); }
+};
+
+function download(){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  a.download = FILENAME; a.click(); URL.revokeObjectURL(a.href);
+  clean('exported');
+}
+function upload(){
+  const i = document.createElement('input');
+  i.type='file'; i.accept='application/json,.json';
+  i.onchange = async ()=>{
+    try{ adopt(JSON.parse(await i.files[0].text())); clean(i.files[0].name + ' \u2713'); gate(false); }
+    catch(e){ alert('That file could not be read as tracker JSON.'); }
+  };
+  i.click();
+}
+function adopt(next){
+  if(!next || !Array.isArray(next.orgs)) throw new Error('bad shape');
+  data = migrate(next); loaded = true;
+  rolesOpen.clear(); editingOrgs.clear(); editingRoles.clear(); categoryEditing.clear();
+  activeCategory = (data.categories[0] && data.categories[0].id) || null;
+  sort = {...SORT_DEFAULT};
+  render();                 // note: no touch() - loading is not an edit
+}
+function note(t){ document.getElementById('fileline').textContent = t; }
+
+/* ---- leaving with unsaved work ----
+   The beforeunload dialog is drawn by the browser: fixed wording, no
+   custom buttons. If the user chooses to stay, this page is still alive,
+   so the timer fires and we show our own dialog, which can offer Save. */
+window.addEventListener('beforeunload', e=>{
+  if(!dirty) return;
+  e.preventDefault();
+  e.returnValue = '';
+  setTimeout(()=>{ if(dirty) showExitDialog(); }, 400);
+});
+
+function showExitDialog(){
+  const d = document.getElementById('exit');
+  if(!d.hidden) return;
+  d.hidden = false;
+  document.getElementById('exitSave').focus();
+}
+document.getElementById('exitSave').onclick = async ()=>{
+  if(await save()) document.getElementById('exit').hidden = true;
+};
+document.getElementById('exitStay').onclick = ()=>{ document.getElementById('exit').hidden = true; };
+
+/* ============================ helpers ============================ */
+
+const val = (o,r,c) => (c.scope==='o' ? o[c.k] : r[c.k]) || '';
+function set(o,r,c,v){ (c.scope==='o' ? o : r)[c.k] = v; touch(); }
+
+function hits(o){
+  const q = query.trim().toLowerCase();
+  const inText = !q || [
+    o.name,
+    ...o.roles.map(r=>Object.values(r).join(' '))
+  ].join(' ').toLowerCase().includes(q);
+  if(!inText) return null;
+  if(!filters.size) return o.roles;              // no status filter: show as-is, even with zero roles
+  const rs = o.roles.filter(r=>filters.has(r.status));
+  return rs.length ? rs : null;                  // status filter active: only orgs with a matching role
+}
+
+function visible(){
+  const out = [];
+  for(const o of data.orgs){
+    if(o.categoryId !== activeCategory) continue;
+    const rs = hits(o);
+    if(rs) out.push([o,rs]);
+  }
+  if(sort.key){
+    const key = sort.key === 'name'
+      ? ([o]) => String(o.name||'').toLowerCase()
+      : (()=>{
+          const c = COLS.find(c=>c.k===sort.key);
+          return ([o,rs]) => rs.map(r=>String(r[c.k]||'').toLowerCase()).filter(Boolean).sort()[0] || '\uffff';
+        })();
+    out.sort((a,b)=> key(a) < key(b) ? -sort.dir : key(a) > key(b) ? sort.dir : 0);
+  }
+  return out;
+}
+
+/* ============================ render ============================ */
+
+function renderTracks(){
+  const el = document.getElementById('tracks');
+  el.innerHTML = '';
+
+  for(const c of data.categories){
+    const item = document.createElement('div');
+    item.className = 'trackitem';
+    item.dataset.catId = c.id;
+    const isEditing = categoryEditing.has(c.id);
+
+    if(isEditing){
+      const i = document.createElement('input');
+      i.className = 'trackinput';
+      i.type = 'text';
+      i.value = c.name || '';
+      i.placeholder = 'Category name';
+      i.setAttribute('aria-label','Category name');
+      i.oninput = ()=>{ c.name = i.value; touch(); };
+      i.onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); categoryEditing.delete(c.id); render(); } };
+      item.append(i);
+    } else {
+      const n = data.orgs.filter(o=>o.categoryId===c.id).reduce((a,o)=>a+o.roles.length,0);
+      const b = document.createElement('button');
+      b.type='button'; b.className='tracksel'; b.setAttribute('role','tab');
+      b.setAttribute('aria-selected', c.id===activeCategory);
+      b.textContent = (c.name || 'Untitled') + ' ';
+      const nEl = document.createElement('span');
+      nEl.className = 'n'; nEl.textContent = String(n);
+      b.append(nEl);
+      b.onclick = ()=>{ activeCategory=c.id; sort={...SORT_DEFAULT}; render(); };
+      item.append(b);
+    }
+
+    const editBtn = document.createElement('button');
+    editBtn.type='button'; editBtn.className='trackedit'; editBtn.textContent = isEditing ? '✓' : '✎';
+    editBtn.title = isEditing ? 'Done renaming' : 'Rename this category';
+    editBtn.setAttribute('aria-label', editBtn.title);
+    editBtn.onclick = ()=>{
+      const entering = !isEditing;
+      categoryEditing.has(c.id) ? categoryEditing.delete(c.id) : categoryEditing.add(c.id);
+      render();
+      if(entering){
+        const inp = document.querySelector(`.trackitem[data-cat-id="${c.id}"] input`);
+        if(inp) inp.focus();
+      }
+    };
+    item.append(editBtn);
+
+    const delBtn = document.createElement('button');
+    delBtn.type='button'; delBtn.className='trackdel'; delBtn.textContent='×';
+    delBtn.title = 'Remove this category';
+    delBtn.setAttribute('aria-label','Remove ' + (c.name || 'this category'));
+    delBtn.onclick = ()=> killCategory(c);
+    item.append(delBtn);
+
+    el.append(item);
+  }
+
+  if(data.categories.length < MAX_CATEGORIES){
+    const add = document.createElement('button');
+    add.type = 'button';
+    const first = data.categories.length === 0;
+    add.className = first ? 'act solid addtrack-first' : 'addtrack';
+    add.textContent = first ? 'Add role' : '+';
+    add.title = 'Add a category, e.g. Industry, PhD, Part-time';
+    add.setAttribute('aria-label', add.title);
+    add.onclick = ()=>{
+      const c = category({name:''});
+      data.categories.push(c);
+      activeCategory = c.id;
+      categoryEditing.add(c.id);
+      sort = {...SORT_DEFAULT};
+      touch(); render();
+      const inp = document.querySelector(`.trackitem[data-cat-id="${c.id}"] input`);
+      if(inp) inp.focus();
+    };
+    el.append(add);
+  }
+}
+
+function renderStrip(){
+  const el = document.getElementById('strip');
+  el.innerHTML = '';
+  const pool = data.orgs.filter(o=>o.categoryId===activeCategory).flatMap(o=>o.roles);
+  for(const s of STATUSES){
+    const n = pool.filter(r=>r.status===s.k).length;
+    const b = document.createElement('button');
+    b.type='button'; b.className='chip';
+    b.style.color = `var(--s-${s.k})`;
+    b.setAttribute('aria-pressed', filters.has(s.k));
+    b.innerHTML = `<span class="dot"></span>${s.label} <span class="n">${n}</span>`;
+    b.onclick = ()=>{ filters.has(s.k) ? filters.delete(s.k) : filters.add(s.k); render(); };
+    el.append(b);
+  }
+  if(filters.size){
+    const c = document.createElement('button');
+    c.type='button'; c.className='chip clear'; c.textContent='Show all';
+    c.onclick = ()=>{ filters.clear(); render(); };
+    el.append(c);
+  }
+}
+
+function renderCols(){
+  const cg = document.getElementById('cols');
+  cg.innerHTML = '';
+  const mk = (w)=>{ const c = document.createElement('col'); if(w) c.style.width = w; return c; };
+  cg.append(mk('26px'));
+  for(const c of COLS) cg.append(mk(c.w === 'auto' ? null : c.w));
+  cg.append(mk('64px'));
+}
+
+// the sticky top header only ever names the org level - the role-specific
+// labels (Role, Contact, Status...) appear as their own row once an org is
+// expanded, right above that org's list of jobs (see subHeadRow)
+function renderHead(){
+  renderCols();
+  const tr = document.getElementById('head');
+  tr.innerHTML = '';
+  tr.append(th(''));
+  const h = th(ORG_LABEL);
+  h.colSpan = COLS.length;
+  h.className = 'sortable';
+  if(sort.key==='name') h.innerHTML = `${ORG_LABEL} <span class="arrow">${sort.dir>0?'↑':'↓'}</span>`;
+  h.onclick = ()=>{
+    sort = sort.key==='name' ? {key:'name', dir:-sort.dir} : {key:'name', dir:1};
+    render();
+  };
+  tr.append(h);
+  tr.append(th(''));
+}
+function th(text){ const h=document.createElement('th'); h.textContent=text; return h; }
+
+// role-column labels, repeated above each expanded org's own job listing
+function subHeadRow(cols){
+  const tr = document.createElement('tr');
+  tr.className = 'subhead';
+  tr.append(document.createElement('td'));
+  for(const c of cols){
+    const td = document.createElement('td');
+    td.textContent = c.label;
+    tr.append(td);
+  }
+  tr.append(document.createElement('td'));
+  return tr;
+}
+
+function emptyRolesRow(cols){
+  const tr = document.createElement('tr');
+  tr.className = 'row rolerow-empty';
+  tr.append(document.createElement('td'));
+  const td = document.createElement('td');
+  td.colSpan = cols.length;
+  td.textContent = 'No roles added yet — use + above to add one.';
+  tr.append(td);
+  tr.append(document.createElement('td'));
+  return tr;
+}
+
+/* Editable version of a field - only rendered while its role is in edit mode. */
+function cellInput(o,r,c){
+  if(c.type === 'status'){
+    const s = document.createElement('select');
+    s.className='status'; s.dataset.s = r.status;
+    s.innerHTML = STATUSES.map(x=>`<option value="${x.k}"${x.k===r.status?' selected':''}>${x.label}</option>`).join('');
+    s.onchange = ()=>{ r.status = s.value; touch(); render(); };
+    return s;
+  }
+  const i = document.createElement('input');
+  i.className = 'cell';
+  i.type = 'text';
+  i.value = val(o,r,c);
+  i.placeholder = '—';
+  i.setAttribute('aria-label', c.label);
+  i.oninput = ()=> set(o,r,c,i.value);
+  i.onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); toggleRoleEdit(r.id); } };
+  return i;
+}
+
+/* Read-only version of a field - shown by default; clicking it does nothing.
+   Editing only happens through the row's Edit button. */
+function fieldDisplay(o,r,c){
+  if(c.type === 'status'){
+    const s = STATUSES.find(x=>x.k===r.status);
+    const span = document.createElement('span');
+    span.className = 'statusbadge';
+    span.dataset.s = r.status;
+    span.textContent = s ? s.label : r.status;
+    return span;
+  }
+  const v = val(o,r,c);
+  if(c.k === 'link' && v){
+    const a = document.createElement('a');
+    a.className = 'fieldtext fieldlink';
+    a.href = /^[a-z][a-z0-9+.-]*:\/\//i.test(v) ? v : 'https://' + v;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.title = v;
+    a.textContent = v;
+    return a;
+  }
+  const span = document.createElement('span');
+  span.className = 'fieldtext' + (v ? '' : ' empty');
+  span.textContent = v || '—';
+  return span;
+}
+
+/* The org's name, shown on its own header row. Read-only text by default;
+   the pencil button next to it enables editing. The row itself is what
+   expands/collapses the jobs underneath - this cell never does that. */
+function orgNameCell(o){
+  const wrap = document.createElement('div');
+  wrap.className = 'namewrap';
+
+  const arrow = document.createElement('span');
+  arrow.className = 'arrow-indicator';
+  arrow.textContent = rolesOpen.has(o.id) ? '▾' : '▸';
+  wrap.append(arrow);
+
+  if(editingOrgs.has(o.id)){
+    const i = document.createElement('input');
+    i.className = 'cell org';
+    i.type = 'text';
+    i.value = o.name || '';
+    i.placeholder = ORG_LABEL;
+    i.setAttribute('aria-label', ORG_LABEL);
+    i.oninput = ()=>{ o.name = i.value; touch(); };
+    i.onclick = e => e.stopPropagation();
+    i.onmousedown = e => e.stopPropagation();
+    i.onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); toggleOrgEdit(o.id); } };
+    wrap.append(i);
+  } else {
+    const span = document.createElement('span');
+    span.className = 'orgname' + (o.name ? '' : ' empty');
+    span.textContent = o.name || `Untitled ${ORG_LABEL.toLowerCase()}`;
+    wrap.append(span);
+  }
+
+  const count = document.createElement('span');
+  count.className = 'count';
+  count.textContent = String(o.roles.length);
+  wrap.append(count);
+
+  return wrap;
+}
+
+function toggleRoles(id){
+  rolesOpen.has(id) ? rolesOpen.delete(id) : rolesOpen.add(id);
+  render();
+}
+
+function toggleOrgEdit(id){
+  editingOrgs.has(id) ? editingOrgs.delete(id) : editingOrgs.add(id);
+  render();
+}
+
+function toggleRoleEdit(id){
+  editingRoles.has(id) ? editingRoles.delete(id) : editingRoles.add(id);
+  render();
+}
+
+function focusField(roleId){
+  const el = document.querySelector(`tr[data-role-id="${roleId}"] .cell`);
+  if(el) el.focus();
+}
+
+function killRole(o,r){
+  o.roles = o.roles.filter(x=>x.id!==r.id);
+  editingRoles.delete(r.id);
+  touch(); render();
+}
+
+function killOrg(o){
+  const roleNote = o.roles.length ? ` and all ${o.roles.length} of its roles` : '';
+  if(!confirm(`Remove ${o.name || 'this organisation'}${roleNote}?`)) return;
+  data.orgs = data.orgs.filter(x=>x.id!==o.id);
+  rolesOpen.delete(o.id); editingOrgs.delete(o.id);
+  o.roles.forEach(r=>editingRoles.delete(r.id));
+  touch(); render();
+}
+
+function killCategory(c){
+  const orgsHere = data.orgs.filter(o=>o.categoryId===c.id);
+  const roleCount = orgsHere.reduce((a,o)=>a+o.roles.length,0);
+  const detail = orgsHere.length
+    ? ` and all ${orgsHere.length} organisation${orgsHere.length===1?'':'s'} in it (${roleCount} role${roleCount===1?'':'s'} total)`
+    : ' (it has no organisations in it yet)';
+  if(!confirm(`Remove ${c.name || 'this category'}${detail}?`)) return;
+  for(const o of orgsHere){
+    rolesOpen.delete(o.id); editingOrgs.delete(o.id);
+    o.roles.forEach(r=>editingRoles.delete(r.id));
+  }
+  data.orgs = data.orgs.filter(o=>o.categoryId!==c.id);
+  data.categories = data.categories.filter(x=>x.id!==c.id);
+  categoryEditing.delete(c.id);
+  if(activeCategory===c.id) activeCategory = (data.categories[0] && data.categories[0].id) || null;
+  sort = {...SORT_DEFAULT};
+  touch(); render();
+}
+
+// the org's own row: name (click anywhere to expand/collapse), rename and add-role controls on the right
+function headerRow(o, cols){
+  const tr = document.createElement('tr');
+  tr.className = 'row org-header gtop';
+  tr.dataset.orgId = o.id;
+  const isEditingName = editingOrgs.has(o.id);
+
+  const gut = document.createElement('td');
+  gut.className = 'gut';
+  tr.append(gut);
+
+  const nameTd = document.createElement('td');
+  nameTd.colSpan = cols.length;
+  nameTd.append(orgNameCell(o));
+  tr.append(nameTd);
+
+  const end = document.createElement('td');
+  end.className = 'end';
+  const wrap = document.createElement('div');
+  wrap.className = 'endwrap';
+  const editBtn = document.createElement('button');
+  editBtn.type='button'; editBtn.className='iconbtn'; editBtn.textContent = isEditingName ? '✓' : '✎';
+  editBtn.title = isEditingName ? 'Done renaming' : 'Rename organisation';
+  editBtn.setAttribute('aria-label', editBtn.title);
+  editBtn.onclick = e => {
+    e.stopPropagation();
+    const entering = !isEditingName;
+    toggleOrgEdit(o.id);
+    if(entering){
+      const el = document.querySelector(`tr[data-org-id="${o.id}"] .cell.org`);
+      if(el) el.focus();
+    }
+  };
+  const addBtn = document.createElement('button');
+  addBtn.type='button'; addBtn.className='addrole'; addBtn.textContent='+';
+  addBtn.title = 'Add another role';
+  addBtn.setAttribute('aria-label','Add another role at ' + (o.name || 'this organisation'));
+  addBtn.onclick = e => {
+    e.stopPropagation();
+    const nr = role();
+    o.roles.push(nr);
+    rolesOpen.add(o.id);
+    editingRoles.add(nr.id);
+    touch(); render();
+    focusField(nr.id);
+  };
+  const delBtn = document.createElement('button');
+  delBtn.type='button'; delBtn.className='kill'; delBtn.textContent='×';
+  delBtn.title = 'Remove this organisation';
+  delBtn.setAttribute('aria-label','Remove ' + (o.name || 'this organisation'));
+  delBtn.onclick = e => { e.stopPropagation(); killOrg(o); };
+  wrap.append(editBtn, addBtn, delBtn);
+  end.append(wrap);
+  tr.append(end);
+
+  if(!isEditingName){
+    tr.classList.add('clickable');
+    tr.setAttribute('aria-expanded', rolesOpen.has(o.id));
+    tr.onclick = ()=> toggleRoles(o.id);
+  }
+  return tr;
+}
+
+// one row per job/role - read-only by default; clicking the row does nothing
+function roleRow(o, r, cols){
+  const tr = document.createElement('tr');
+  tr.className = 'row rolerow';
+  tr.dataset.roleId = r.id;
+  const isEditing = editingRoles.has(r.id);
+
+  const gut = document.createElement('td');
+  gut.className = 'gut';
+  tr.append(gut);
+
+  for(const c of cols){
+    const td = document.createElement('td');
+    const alwaysLive = c.type === 'status';
+    td.append((isEditing || alwaysLive) ? cellInput(o,r,c) : fieldDisplay(o,r,c));
+    tr.append(td);
+  }
+
+  const end = document.createElement('td');
+  end.className = 'end';
+  const wrap = document.createElement('div');
+  wrap.className = 'endwrap';
+  const editBtn = document.createElement('button');
+  editBtn.type='button'; editBtn.className='iconbtn'; editBtn.textContent = isEditing ? '✓' : '✎';
+  editBtn.title = isEditing ? 'Done editing' : 'Edit this role';
+  editBtn.setAttribute('aria-label', editBtn.title);
+  editBtn.onclick = ()=>{
+    const entering = !isEditing;
+    toggleRoleEdit(r.id);
+    if(entering) focusField(r.id);
+  };
+  const k = document.createElement('button');
+  k.type='button'; k.className='kill'; k.textContent='×';
+  k.title = 'Remove this role';
+  k.onclick = ()=> killRole(o,r);
+  wrap.append(editBtn, k);
+  end.append(wrap);
+  tr.append(end);
+  return tr;
+}
+
+function renderBody(){
+  const tb = document.getElementById('body');
+  const em = document.getElementById('empty');
+  tb.innerHTML = '';
+
+  const cols = COLS;
+
+  if(!data.categories.length){
+    em.hidden = false;
+    em.innerHTML = `<p>Start by adding a category above — Industry, PhD, Part-time, or whatever fits how you're job hunting.</p>`;
+    return;
+  }
+
+  const groups = visible();
+
+  if(!groups.length){
+    em.hidden = false;
+    const filtered = query || filters.size;
+    if(filtered){
+      em.innerHTML = `<p>Nothing matches that filter.</p><button class="act" onclick="window.__reset()">Clear the filter</button>`;
+    } else {
+      const catName = (data.categories.find(c=>c.id===activeCategory) || {}).name || 'this category';
+      em.innerHTML = '';
+      const p = document.createElement('p');
+      p.textContent = `No organisations in ${catName} yet. Add the first one to get started.`;
+      const b = document.createElement('button');
+      b.type='button'; b.className='act solid'; b.textContent='Add organisation';
+      b.onclick = ()=> document.getElementById('addOrg').click();
+      em.append(p, b);
+    }
+    return;
+  }
+  em.hidden = true;
+
+  // while searching or filtering by status, a matching org's jobs stay visible
+  // regardless of its collapsed state, so the match is never hidden from view
+  const isFiltered = !!(query.trim() || filters.size);
+
+  for(const [o,rs] of groups){
+    tb.append(headerRow(o, cols));
+    const showRoles = isFiltered || rolesOpen.has(o.id);
+    if(showRoles){
+      if(rs.length){
+        tb.append(subHeadRow(cols));
+        rs.forEach(r=> tb.append(roleRow(o, r, cols)));
+      } else {
+        tb.append(emptyRolesRow(cols));
+      }
+    }
+  }
+}
+
+function render(){
+  renderTracks(); renderStrip(); renderHead(); renderBody();
+  const addOrgBtn = document.getElementById('addOrg');
+  addOrgBtn.disabled = !activeCategory;
+  addOrgBtn.title = activeCategory ? '' : 'Add a category above first';
+}
+
+window.__reset = ()=>{
+  query=''; filters.clear(); document.getElementById('q').value=''; render();
+};
+
+/* ============================ wiring ============================ */
+
+document.getElementById('addOrg').onclick = ()=>{
+  if(!activeCategory) return;
+  const o = org({categoryId: activeCategory});
+  data.orgs.unshift(o);
+  editingOrgs.add(o.id);
+  rolesOpen.add(o.id);
+  editingRoles.add(o.roles[0].id);
+  query=''; filters.clear(); document.getElementById('q').value='';
+  sort={...SORT_DEFAULT};
+  touch(); render();
+  const first = document.querySelector('#body .cell');
+  if(first) first.focus();
+};
+
+let qTimer;
+document.getElementById('q').oninput = e => {
+  clearTimeout(qTimer);
+  qTimer = setTimeout(()=>{ query = e.target.value; render(); },140);
+};
+
+document.addEventListener('keydown', e=>{
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+  if(e.key === '/' && !typing){ e.preventDefault(); document.getElementById('q').focus(); }
+  if(e.key === 'Escape' && document.activeElement === document.getElementById('q')){
+    window.__reset(); document.getElementById('q').blur();
+  }
+  if((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's'){
+    e.preventDefault(); document.getElementById('saveFile').click();
+  }
+});
+
+if(!canPick){
+  document.getElementById('openFile').textContent = 'Import JSON';
+  document.getElementById('saveFile').textContent = 'Export JSON';
+}
+
+render();
+boot();
+</script>
+</body>
+</html>
