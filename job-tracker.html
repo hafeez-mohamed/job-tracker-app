@@ -3,10 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Offline by design: this policy lets the page load nothing from anywhere.
+     No fonts, scripts, styles, images or requests leave the machine.
+     connect-src 'self' only allows reading jobs.json from the same local folder. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; font-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <title>Job tracker</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
   --ground:#F2F4F4;
@@ -25,8 +27,11 @@
   --s-rejected:#9C3B3B;
   --s-dropped:#9AA1A5;
 
-  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
-  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  /* Fonts come only from what is installed on this computer. IBM Plex is used
+     if installed (Ubuntu: sudo apt install fonts-ibm-plex); otherwise the
+     system font. Naming a font here never triggers a download. */
+  --sans:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,Consolas,'DejaVu Sans Mono',monospace;
   --row:20px;
   --org-row:36px;
 }
@@ -254,8 +259,10 @@ tr.org-header .kill{width:18px;height:18px;font-size:13px;line-height:17px}
 tr.org-header .kill{font-size:17px}
 
 /* ---------- empty ---------- */
-.empty{padding:56px 20px;text-align:center;color:var(--muted)}
-.empty p{margin:0 0 14px;max-width:44ch;margin-inline:auto}
+/* scoped to the empty-state box by id: a bare .empty also matched blank
+   fields (.fieldtext.empty) and blew those rows up to ~110px tall */
+#empty{padding:56px 20px;text-align:center;color:var(--muted)}
+#empty p{margin:0 0 14px;max-width:44ch;margin-inline:auto}
 
 .foot{
   padding:5px 14px;border-top:1px solid var(--rule);background:var(--surface);
@@ -317,7 +324,7 @@ tr.org-header .kill{font-size:17px}
     <h3 id="gateH">Open your jobs.json</h3>
     <p>All data lives in <code>jobs.json</code> &mdash; nothing is stored in this page or in the browser.</p>
     <p>Opened from a <code>file://</code> path, the browser won't let the page read the file on its own. Pick it once and everything works from there.</p>
-    <p>To skip this step every time, serve the folder instead: <code>python3 -m http.server</code></p>
+    <p>To skip this step every time, serve the folder to this computer only: <code>python3 -m http.server 8000 --bind 127.0.0.1</code></p>
     <div class="cardacts">
       <button class="act solid" id="gatePick">Choose jobs.json</button>
       <button class="act" id="gateNew">Start an empty tracker</button>
@@ -433,8 +440,8 @@ let loaded  = false;         // a file has been opened or fetched
 
 function touch(){
   dirty = true;
-  mark(handle ? '\u25cf ' + handle.name : '\u25cf unsaved');
-  document.title = '\u2022 Job tracker';
+  mark(handle ? '● ' + handle.name : '● unsaved');
+  document.title = '• Job tracker';
 }
 function clean(label){
   dirty = false;
@@ -453,12 +460,13 @@ const FILENAME = 'jobs.json';
    Served over http:// this fetches jobs.json with no interaction.
    Opened as a file:// path the browser blocks the read, so we ask. */
 async function boot(){
+  if(location.protocol === 'file:'){ gate(true); return; }   // browsers never allow this read
   try{
     const res = await fetch(FILENAME, {cache:'no-store'});
     if(!res.ok) throw new Error(res.status);
     adopt(await res.json());
-    clean(FILENAME + ' \u2713');
-    note('Loaded ' + FILENAME + '. Press \u2318S / Ctrl+S to write changes back.');
+    clean(FILENAME + ' ✓');
+    note('Loaded ' + FILENAME + '. Press ⌘S / Ctrl+S to write changes back.');
     gate(false);
     return;
   }catch(e){ /* file:// or missing file - fall through to the gate */ }
@@ -474,7 +482,7 @@ document.getElementById('gatePick').onclick = ()=> document.getElementById('open
 document.getElementById('gateNew').onclick  = ()=>{
   data = {version:2, categories:[], orgs:[]};
   activeCategory = null;
-  loaded = true; gate(false); render(); clean('new \u2014 not saved');
+  loaded = true; gate(false); render(); clean('new — not saved');
 };
 
 async function writeFile(){
@@ -482,7 +490,7 @@ async function writeFile(){
     const w = await handle.createWritable();
     await w.write(JSON.stringify(data,null,2));
     await w.close();
-    clean(handle.name + ' \u2713');
+    clean(handle.name + ' ✓');
     return true;
   }catch(e){ mark('save failed'); return false; }
 }
@@ -507,7 +515,7 @@ document.getElementById('openFile').onclick = async ()=>{
     const [h] = await window.showOpenFilePicker({types:PICKER.types});
     adopt(JSON.parse(await (await h.getFile()).text()));
     handle = h;
-    clean(h.name + ' \u2713');
+    clean(h.name + ' ✓');
     note('Writing to ' + h.name + ' on every save.');
     gate(false);
   }catch(e){ if(e && e.name !== 'AbortError') alert('That file could not be read as tracker JSON.'); }
@@ -523,7 +531,7 @@ function upload(){
   const i = document.createElement('input');
   i.type='file'; i.accept='application/json,.json';
   i.onchange = async ()=>{
-    try{ adopt(JSON.parse(await i.files[0].text())); clean(i.files[0].name + ' \u2713'); gate(false); }
+    try{ adopt(JSON.parse(await i.files[0].text())); clean(i.files[0].name + ' ✓'); gate(false); }
     catch(e){ alert('That file could not be read as tracker JSON.'); }
   };
   i.click();
@@ -589,7 +597,7 @@ function visible(){
       ? ([o]) => String(o.name||'').toLowerCase()
       : (()=>{
           const c = COLS.find(c=>c.k===sort.key);
-          return ([o,rs]) => rs.map(r=>String(r[c.k]||'').toLowerCase()).filter(Boolean).sort()[0] || '\uffff';
+          return ([o,rs]) => rs.map(r=>String(r[c.k]||'').toLowerCase()).filter(Boolean).sort()[0] || '￿';
         })();
     out.sort((a,b)=> key(a) < key(b) ? -sort.dir : key(a) > key(b) ? sort.dir : 0);
   }
@@ -789,11 +797,14 @@ function fieldDisplay(o,r,c){
   }
   const v = val(o,r,c);
   if(c.k === 'link' && v){
+    // The only way this page ever touches the network: you click a job's link,
+    // and it opens in a new tab with no referrer sent.
     const a = document.createElement('a');
     a.className = 'fieldtext fieldlink';
     a.href = /^[a-z][a-z0-9+.-]*:\/\//i.test(v) ? v : 'https://' + v;
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
+    a.referrerPolicy = 'no-referrer';
     a.title = v;
     a.textContent = v;
     return a;
@@ -1018,19 +1029,22 @@ function renderBody(){
 
   if(!groups.length){
     em.hidden = false;
+    em.innerHTML = '';
     const filtered = query || filters.size;
+    const p = document.createElement('p');
+    const b = document.createElement('button');
+    b.type='button';
     if(filtered){
-      em.innerHTML = `<p>Nothing matches that filter.</p><button class="act" onclick="window.__reset()">Clear the filter</button>`;
+      p.textContent = 'Nothing matches that filter.';
+      b.className='act'; b.textContent='Clear the filter';
+      b.onclick = ()=> window.__reset();
     } else {
       const catName = (data.categories.find(c=>c.id===activeCategory) || {}).name || 'this category';
-      em.innerHTML = '';
-      const p = document.createElement('p');
       p.textContent = `No organisations in ${catName} yet. Add the first one to get started.`;
-      const b = document.createElement('button');
-      b.type='button'; b.className='act solid'; b.textContent='Add organisation';
+      b.className='act solid'; b.textContent='Add organisation';
       b.onclick = ()=> document.getElementById('addOrg').click();
-      em.append(p, b);
     }
+    em.append(p, b);
     return;
   }
   em.hidden = true;
