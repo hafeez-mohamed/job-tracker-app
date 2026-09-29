@@ -13,8 +13,9 @@ Single-file HTML · Vanilla JS · No build, no dependencies · Fully offline
 - Data: everything lives in `jobs.json`; nothing is stored in the page or the browser
 - Categories: up to 4 user-named tracks (e.g. Industry, PhD, Part-time)
 - Structure: category → organisation → roles
-- Role fields: role, contact, status, URL, location, notes
+- Role fields: role, contact, status, applied on, URL, location, notes
 - Statuses: Not applied, Applied, Interview, Processing, Accepted, Rejected, Dropped
+- Applied on: filled with today's date the first time a role is set to Applied (editable)
 - Saving: `⌘S` / `Ctrl+S` writes back to the same file (File System Access API); falls back to import/export JSON in other browsers
 - Migration: older `jobs.json` files are upgraded automatically on open
 
@@ -44,6 +45,6 @@ then open `http://127.0.0.1:8000/job-tracker.html`. Without `--bind 127.0.0.1`, 
       "categories": [ { "id", "name" } ],
       "orgs": [
         { "id", "categoryId", "name",
-          "roles": [ { "id", "title", "status", "contact", "link", "location", "notes" } ] }
+          "roles": [ { "id", "title", "status", "applied", "contact", "link", "location", "notes" } ] }
       ]
     }

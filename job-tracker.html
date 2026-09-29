@@ -362,19 +362,23 @@ const STATUSES = [
 // job hunts is the category itself (Industry, PhD, freelance, whatever),
 // not the fields on each role, so those fields stay uniform
 const COLS = [
-  {k:'title',    label:'Role',      w:'18%'},
-  {k:'contact',  label:'Contact',   w:'15%'},
-  {k:'status',   label:'Status',    w:'10%', type:'status'},
-  {k:'link',     label:'URL',       w:'16%'},
-  {k:'location', label:'Location',  w:'12%'},
-  {k:'notes',    label:'Notes',     w:'auto'}
+  {k:'title',    label:'Role',       w:'18%'},
+  {k:'contact',  label:'Contact',    w:'12%'},
+  {k:'status',   label:'Status',     w:'10%', type:'status'},
+  {k:'applied',  label:'Applied on', w:'9%'},
+  {k:'link',     label:'URL',        w:'14%'},
+  {k:'location', label:'Location',   w:'10%'},
+  {k:'notes',    label:'Notes',      w:'auto'}
 ];
 const ORG_LABEL = 'Organisation';
 const MAX_CATEGORIES = 4;
 
 const uid = () => Math.random().toString(36).slice(2,9);
 const category = (o={}) => Object.assign({id:uid(),name:''},o);
-const role = (o={}) => Object.assign({id:uid(),title:'',status:'not_applied',contact:'',link:'',location:'',notes:''},o);
+const role = (o={}) => Object.assign({id:uid(),title:'',status:'not_applied',applied:'',contact:'',link:'',location:'',notes:''},o);
+
+// today as YYYY-MM-DD in local time (for the Applied on column)
+const today = () => { const d = new Date(), p = n => String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; };
 const org = (o={}) => Object.assign({id:uid(),categoryId:null,name:'',roles:[role()]},o);
 
 /* Brings an older jobs.json up to the current shape: org-level location and
@@ -407,6 +411,7 @@ function migrate(d){
     for(const r of (o.roles||[])){
       if(r.location === undefined) r.location = legacyLocation || '';
       if(r.contact === undefined) r.contact = legacyContact;
+      if(r.applied === undefined) r.applied = '';
       if(r.status === 'todo') r.status = 'not_applied';
       if(r.status === 'offer') r.status = 'accepted';
     }
@@ -770,7 +775,11 @@ function cellInput(o,r,c){
     const s = document.createElement('select');
     s.className='status'; s.dataset.s = r.status;
     s.innerHTML = STATUSES.map(x=>`<option value="${x.k}"${x.k===r.status?' selected':''}>${x.label}</option>`).join('');
-    s.onchange = ()=>{ r.status = s.value; touch(); render(); };
+    s.onchange = ()=>{
+      r.status = s.value;
+      if(s.value === 'applied' && !r.applied) r.applied = today();   // first time marked Applied
+      touch(); render();
+    };
     return s;
   }
   const i = document.createElement('input');
