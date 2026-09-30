@@ -21,7 +21,8 @@
 
   --s-not_applied:#7A848A;
   --s-applied:#1B5E8C;
-  --s-interview:#9A6212;
+  --s-hr_interview:#9A6212;
+  --s-tech_interview:#17797F;
   --s-processing:#6B4FA0;
   --s-accepted:#1D6B4A;
   --s-rejected:#9C3B3B;
@@ -40,7 +41,7 @@
   :root{
     --ground:#15181A;--surface:#1C2023;--ink:#E7EAEA;--muted:#939DA2;
     --rule:#31383C;--rule-soft:#262B2E;--accent:#5BA3D0;
-    --s-not_applied:#8A949A;--s-applied:#4D91C4;--s-interview:#C58E33;
+    --s-not_applied:#8A949A;--s-applied:#4D91C4;--s-hr_interview:#C58E33;--s-tech_interview:#3FA9B3;
     --s-processing:#A88FD6;--s-accepted:#3E9A70;--s-rejected:#C46B6B;--s-dropped:#767E82;
   }
 }
@@ -217,7 +218,8 @@ tr.subhead td{
 }
 .statusbadge[data-s="not_applied"]{background:var(--s-not_applied)}
 .statusbadge[data-s="applied"]{background:var(--s-applied)}
-.statusbadge[data-s="interview"]{background:var(--s-interview)}
+.statusbadge[data-s="hr_interview"]{background:var(--s-hr_interview)}
+.statusbadge[data-s="tech_interview"]{background:var(--s-tech_interview)}
 .statusbadge[data-s="processing"]{background:var(--s-processing)}
 .statusbadge[data-s="accepted"]{background:var(--s-accepted)}
 .statusbadge[data-s="rejected"]{background:var(--s-rejected)}
@@ -234,7 +236,8 @@ tr.subhead td{
 .status option{color:var(--ink);background:var(--surface);font-weight:400}
 .status[data-s="not_applied"]{background:var(--s-not_applied)}
 .status[data-s="applied"]{background:var(--s-applied)}
-.status[data-s="interview"]{background:var(--s-interview)}
+.status[data-s="hr_interview"]{background:var(--s-hr_interview)}
+.status[data-s="tech_interview"]{background:var(--s-tech_interview)}
 .status[data-s="processing"]{background:var(--s-processing)}
 .status[data-s="accepted"]{background:var(--s-accepted)}
 .status[data-s="rejected"]{background:var(--s-rejected)}
@@ -349,13 +352,14 @@ tr.org-header .kill{font-size:17px}
 /* ============================ model ============================ */
 
 const STATUSES = [
-  {k:'not_applied', label:'Not applied'},
-  {k:'applied',      label:'Applied'},
-  {k:'interview',    label:'Interview'},
-  {k:'processing',   label:'Processing'},
-  {k:'accepted',     label:'Accepted'},
-  {k:'rejected',     label:'Rejected'},
-  {k:'dropped',      label:'Dropped'}
+  {k:'not_applied',    label:'Not applied'},
+  {k:'applied',        label:'Applied'},
+  {k:'hr_interview',   label:'HR interview'},
+  {k:'tech_interview', label:'Tech interview'},
+  {k:'processing',     label:'Processing'},
+  {k:'accepted',       label:'Accepted'},
+  {k:'rejected',       label:'Rejected'},
+  {k:'dropped',        label:'Dropped'}
 ];
 
 // one shared row layout for every category - what differs between people's
@@ -414,6 +418,13 @@ function migrate(d){
       if(r.applied === undefined) r.applied = '';
       if(r.status === 'todo') r.status = 'not_applied';
       if(r.status === 'offer') r.status = 'accepted';
+      if(r.status === 'interview') r.status = 'hr_interview';   // the single old Interview stage becomes the first round
+      // a short-lived version kept the folder name in its own field; put it back into Notes
+      if(r.folder !== undefined){
+        const f = String(r.folder || '').trim();
+        if(f && !String(r.notes || '').includes(f)) r.notes = r.notes ? f + ' · ' + r.notes : f;
+        delete r.folder;
+      }
     }
     delete o.location;
     delete o.contacts;
@@ -578,6 +589,19 @@ document.getElementById('exitStay').onclick = ()=>{ document.getElementById('exi
 const val = (o,r,c) => (c.scope==='o' ? o[c.k] : r[c.k]) || '';
 function set(o,r,c,v){ (c.scope==='o' ? o : r)[c.k] = v; touch(); }
 
+/* Turns a stored URL into a safe link target, or null if it isn't one.
+   Only http:// and https:// are ever clickable. A bare "example.com/job"
+   gets https:// added in front; anything else (javascript:, data:, file:,
+   and tricks like "javascript://...") is refused and shown as plain text. */
+function safeHref(v){
+  const s = String(v).trim();
+  if(!s) return null;
+  try{
+    const u = new URL(s.includes('://') ? s : 'https://' + s);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : null;
+  }catch(e){ return null; }
+}
+
 function hits(o){
   const q = query.trim().toLowerCase();
   const inText = !q || [
@@ -602,7 +626,7 @@ function visible(){
       ? ([o]) => String(o.name||'').toLowerCase()
       : (()=>{
           const c = COLS.find(c=>c.k===sort.key);
-          return ([o,rs]) => rs.map(r=>String(r[c.k]||'').toLowerCase()).filter(Boolean).sort()[0] || '￿';
+          return ([o,rs]) => rs.map(r=>String(r[c.k]||'').toLowerCase()).filter(Boolean).sort()[0] || '\uffff';
         })();
     out.sort((a,b)=> key(a) < key(b) ? -sort.dir : key(a) > key(b) ? sort.dir : 0);
   }
@@ -805,12 +829,14 @@ function fieldDisplay(o,r,c){
     return span;
   }
   const v = val(o,r,c);
-  if(c.k === 'link' && v){
+  const href = (c.k === 'link' && v) ? safeHref(v) : null;
+  if(href){
     // The only way this page ever touches the network: you click a job's link,
-    // and it opens in a new tab with no referrer sent.
+    // and it opens in a new tab with no referrer sent. Only http(s) links get
+    // here; anything else falls through and is shown as plain text below.
     const a = document.createElement('a');
     a.className = 'fieldtext fieldlink';
-    a.href = /^[a-z][a-z0-9+.-]*:\/\//i.test(v) ? v : 'https://' + v;
+    a.href = href;
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
     a.referrerPolicy = 'no-referrer';
@@ -821,6 +847,7 @@ function fieldDisplay(o,r,c){
   const span = document.createElement('span');
   span.className = 'fieldtext' + (v ? '' : ' empty');
   span.textContent = v || '—';
+  if(v) span.title = v;      // full text on hover when the column cuts it off
   return span;
 }
 
